@@ -14,13 +14,30 @@ def fuzzy_label_match(candidate_text: str, aliases: list[str],
                        threshold: float = config.FUZZY_MATCH_THRESHOLD) -> bool:
     """Case-insensitive, typo-tolerant match of an OCR'd label against a list
     of known aliases for a field. Not exact string equality — OCR text won't
-    be perfectly clean."""
+    be perfectly clean.
+
+    The substring check below is deliberately guarded by a length-ratio
+    requirement. Without it, a short single word that happens to be a
+    literal substring of a longer multi-word alias would count as a match
+    regardless of context — e.g. the standalone word "Consumer" (from an
+    unrelated "You are a STAR Consumer" marketing badge present on every
+    K-Electric bill) is a substring of the alias "consumer name", but is
+    obviously not actually that label. The real similarity between
+    "consumer" and "consumer name" via SequenceMatcher is only 0.762 — below
+    threshold, i.e. the proper fuzzy check already correctly rejects it. An
+    earlier version of this function had an unconditional substring
+    shortcut that overrode that correct rejection. Requiring the shorter
+    string to cover a real fraction of the longer one keeps genuine partial
+    OCR reads (e.g. "amount payabl" for "amount payable") working while
+    filtering out short, generic, unrelated words.
+    """
     candidate = candidate_text.strip().lower()
     if not candidate:
         return False
     for alias in aliases:
         alias_l = alias.lower()
-        if alias_l in candidate or candidate in alias_l:
+        shorter, longer = (candidate, alias_l) if len(candidate) <= len(alias_l) else (alias_l, candidate)
+        if shorter and shorter in longer and len(shorter) / len(longer) >= 0.7:
             return True
         ratio = difflib.SequenceMatcher(None, candidate, alias_l).ratio()
         if ratio >= threshold:
@@ -68,6 +85,44 @@ def make_field(value, confidence: float, threshold: float = config.DEFAULT_CONFI
     if extra:
         field.update(extra)
     return field
+
+
+# Matches the first well-formed decimal number in a string: digits, optional
+# comma grouping, optional single decimal point. Deliberately anchored so it
+# can't match a string with two separate number-like fragments concatenated
+# together (e.g. two adjacent OCR tokens merged into one row/cell) — it just
+# extracts the first clean number instead of trying to parse the whole mess.
+#
+# The comma-grouped branch requires AT LEAST ONE comma group (+, not *) —
+# with * it would happily match just the first 1-3 digits of a bare number
+# with no comma at all (e.g. "2363" matching only "236") and stop there,
+# since the comma group was optional and satisfied by zero occurrences.
+# Requiring + means a comma-less run of digits fails that branch entirely
+# and falls through to the second, fully-greedy alternative instead.
+_CLEAN_NUMBER_RE = re.compile(r"\d{1,3}(?:,\d{3})+(?:\.\d+)?|\d+(?:\.\d+)?")
+
+
+def safe_parse_amount(raw_text: str) -> float | None:
+    """Extract a single numeric amount from OCR'd text, never raising.
+
+    Replaces the old pattern of `re.sub(r"[^\\d.]", "", text)` followed by a
+    bare `float(...)` call, which crashes with ValueError whenever OCR merges
+    two adjacent number-shaped tokens into one string (e.g. two transaction
+    amounts on the same visual row collapsing into ".49046.91" — two decimal
+    points, not parseable as a single float). Returns None on failure rather
+    than raising, so callers can degrade to a flagged/low-confidence field
+    instead of the whole image failing.
+    """
+    if not raw_text:
+        return None
+    match = _CLEAN_NUMBER_RE.search(raw_text)
+    if not match:
+        return None
+    numeric_str = match.group(0).replace(",", "")
+    try:
+        return float(numeric_str)
+    except ValueError:
+        return None
 
 
 def region_looks_redacted(image_path: str, bbox: tuple) -> bool:

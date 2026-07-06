@@ -1,12 +1,7 @@
 #!/usr/bin/env python3
-"""
-Yaqeen extraction pipeline — standalone, runs against a local folder of images
-and writes validated structured JSON. See README.md for usage.
-
-    python3 main.py --input ./images --output ./output --backend auto
-"""
 from __future__ import annotations
 import argparse
+import gc
 import json
 import sys
 import time
@@ -179,6 +174,32 @@ def main():
                                 args.threshold, engine_cache)
         all_stats.append(stats)
         print()
+
+        # BUG FIX: engine_cache used to live for the ENTIRE run, so every
+        # engine used so far stayed resident in memory even after its
+        # category finished. Concretely: by the time wallet_statements
+        # started, the full utility-bill engine (PP-StructureV3 — layout
+        # model, table model, OCR det/rec, orientation classifiers) was
+        # STILL loaded, on top of the new wallet-statement engine
+        # (PP-OCRv6) being initialized. On a CPU-only machine with no GPU
+        # (this project's dev environment), that's enough to exhaust
+        # available RAM partway through a run — confirmed by the actual
+        # failure pattern seen: 2 utility bills processed fine, the 3rd
+        # failed on a tiny 22.4 MiB allocation (a sign of being right at
+        # the memory ceiling, not one big spike), and the wallet-statement
+        # engine then failed to even INITIALIZE immediately after — both
+        # consistent with cumulative memory pressure, not a code bug in
+        # the extractors themselves.
+        #
+        # Each category maps to exactly one doc_type/engine and nothing
+        # downstream ever reuses a prior category's engine (utility_bills
+        # -> wallet_statements -> khata are processed once, in order), so
+        # it's always safe to drop this category's engine before moving to
+        # the next one.
+        doc_type, _ = ROUTES[category]
+        if doc_type in engine_cache:
+            del engine_cache[doc_type]
+            gc.collect()
 
     summary = build_summary(all_stats)
     summary_path = output_dir / "summary.json"

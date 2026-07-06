@@ -1,9 +1,3 @@
-"""
-Central configuration: field alias dictionaries, confidence thresholds,
-and regex patterns used across extractors. Keeping these here means adding
-a new provider (e.g. a second wallet app, or SEPCO alongside K-Electric)
-is a config change, not a code change.
-"""
 
 # ── Confidence ────────────────────────────────────────────────────────────
 DEFAULT_CONFIDENCE_THRESHOLD = 0.85
@@ -20,12 +14,19 @@ UTILITY_BILL_FIELD_ALIASES = {
     "due_date": [
         "due date", "pay by", "payment due date", "last date", "due by",
     ],
+    "issue_date": [
+        "issue date", "bill issue date", "invoice date",
+    ],
     "account_number": [
         "account number", "acc no", "account no", "reference number",
         "consumer number", "customer id",
     ],
     "current_units": [
         "units consumed", "current units", "units this month", "kwh consumed",
+        "current month",
+    ],
+    "last_month_units": [
+        "last month",
     ],
     "customer_name": [
         "customer name", "consumer name", "name", "billed to",

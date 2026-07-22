@@ -1,0 +1,28 @@
+fastapi==0.115.6
+uvicorn[standard]==0.34.0
+sqlalchemy==2.0.36
+alembic==1.14.0
+psycopg2-binary==2.9.10
+pydantic==2.10.4
+pydantic-settings==2.7.1
+python-jose[cryptography]==3.3.0
+passlib[bcrypt]==1.7.4
+bcrypt==4.2.1
+python-multipart==0.0.20
+python-dotenv==1.0.1
+email-validator==2.2.0
+
+# --- Module 3: upload pipeline -----------------------------------------
+python-magic==0.4.27      # real MIME sniffing from file bytes, not trusting client headers
+celery==5.4.0
+redis==5.2.1              # sync client for publishing; redis.asyncio (same package) for the WS bridge subscriber
+
+# --- Module 4: deterministic extraction ---------------------------------
+pdfplumber==0.11.10       # text extraction from digitally-generated PDFs (no OCR needed)
+pytesseract==0.3.13       # OCR for photographed documents (JPG/PNG/HEIC) - classical, not an LLM
+Pillow>=11.0.0,<13
+pillow-heif==1.4.0        # HEIC/HEIF decode support for Pillow
+rapidfuzz==3.10.1         # fuzzy field-label matching (Levenshtein-based, C-accelerated)
+
+# --- Module 5: Gemini integration ---------------------------------------
+google-genai==1.21.0
